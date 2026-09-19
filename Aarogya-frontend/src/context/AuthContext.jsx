@@ -1,19 +1,26 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import * as React from 'react';
 import api from '../services/api';
 
-const AuthContext = createContext(null);
+const AuthContext = React.createContext(null);
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({ children }) {
+  const [user, setUser] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('aarogya_user');
-    const token = localStorage.getItem('aarogya_jwt');
-    if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
+  React.useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem('aarogya_user');
+      const token = localStorage.getItem('aarogya_jwt');
+      if (storedUser && token && storedUser !== 'undefined') {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (err) {
+      console.warn('Failed to parse cached session:', err);
+      localStorage.removeItem('aarogya_user');
+      localStorage.removeItem('aarogya_jwt');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const loginWithPassword = async (phone, password) => {
@@ -38,11 +45,27 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const value = {
+    user,
+    loading,
+    loginWithPassword,
+    verifyOtp,
+    logout,
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithPassword, verifyOtp, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = React.useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+export default AuthContext;
