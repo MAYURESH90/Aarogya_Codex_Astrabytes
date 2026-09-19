@@ -1,5 +1,7 @@
 cat << 'EOF' > src/index.css
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 body {
   margin: 0;
