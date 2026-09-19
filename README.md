@@ -105,3 +105,15 @@ npm test
 | **Doctor (Cardiology Specialist)**| `+919000000004` | `Aarogya@123` |
 | **Patient 1** | `+919111111101` | `Aarogya@123` |
 | **Patient 2** | `+919111111102` | `Aarogya@123` |
+
+### Demo Credentials
+
+The project includes seeded demo accounts for local development.
+
+Run:
+
+npm run seed
+
+Then use the credentials configured in your local development environment.
+
+Do not use demo credentials in production.
