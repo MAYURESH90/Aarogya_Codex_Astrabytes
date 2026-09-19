@@ -1,0 +1,331 @@
+openapi: 3.0.3
+info:
+  title: Aarogya — Adaptive OPD Queue & Patient Continuity System API
+  description: >
+    Complete Backend REST & Real-time API for Aarogya (Team AstraBytes).
+    Features a Unified OPD Queue co-locating Online tokens (O101), Staff Walk-in Paper tokens (P102),
+    and Emergency priority cases (E001) with dynamic AI wait-time re-forecasting.
+  version: 1.0.0
+  contact:
+    name: AstraBytes Team
+servers:
+  - url: http://localhost:5000
+    description: Local Development Server
+
+paths:
+  /health:
+    get:
+      summary: Root health check
+      responses:
+        '200':
+          description: Service status
+
+  /health/db:
+    get:
+      summary: MongoDB connection status
+      responses:
+        '200':
+          description: DB is connected
+
+  /health/redis:
+    get:
+      summary: Redis cache and mutex lock status
+      responses:
+        '200':
+          description: Redis cache status
+
+  /health/prediction:
+    get:
+      summary: Python FastAPI prediction engine status
+      responses:
+        '200':
+          description: Prediction service connectivity status
+
+  /api/auth/register:
+    post:
+      summary: Register patient or hospital user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone]
+              properties:
+                name: { type: string, example: "Rajesh Kumar" }
+                phone: { type: string, example: "+919876543210" }
+                password: { type: string, example: "Secret123" }
+                role: { type: string, enum: [PATIENT, STAFF, DOCTOR, ADMIN], default: PATIENT }
+      responses:
+        '201':
+          description: User registered, OTP sent
+
+  /api/auth/verify-otp:
+    post:
+      summary: Verify phone OTP and get JWT bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, otp]
+              properties:
+                phone: { type: string, example: "+919876543210" }
+                otp: { type: string, example: "123456" }
+      responses:
+        '200':
+          description: Returns JWT token and user profile
+
+  /api/tokens/paper:
+    post:
+      summary: Register Physical / Walk-in Paper Token (Staff only)
+      description: >
+        Enters a physical paper token into the Unified OPD Queue.
+        IMMEDIATELY returns the calculated queue position, predicted wait minutes,
+        and estimated consultation time in Asia/Kolkata timezone.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokenNumber, hospitalId, opdId, doctorId, sessionId]
+              properties:
+                tokenNumber: { type: string, example: "P106" }
+                patient:
+                  type: object
+                  properties:
+                    name: { type: string, example: "Ramesh Pawar" }
+                    phone: { type: string, nullable: true, example: null }
+                    gender: { type: string, example: "MALE" }
+                hospitalId: { type: string }
+                opdId: { type: string }
+                doctorId: { type: string }
+                sessionId: { type: string }
+                date: { type: string, example: "2026-09-19" }
+      responses:
+        '201':
+          description: Token created in unified queue with immediate ETA
+          content:
+            application/json:
+              example:
+                success: true
+                token:
+                  id: "66e9a..."
+                  tokenNumber: "P106"
+                  tokenType: "PAPER"
+                  queuePosition: 6
+                  status: "WAITING"
+                prediction:
+                  predictedWaitMinutes: 48
+                  estimatedConsultationTime: "2026-09-19T14:18:00+05:30"
+                  predictionTimestamp: "2026-09-19T13:30:00+05:30"
+                  predictionSource: "AI"
+
+  /api/tokens/online:
+    post:
+      summary: Register Digital Token (Online patient)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hospitalId, opdId, doctorId, sessionId]
+              properties:
+                hospitalId: { type: string }
+                opdId: { type: string }
+                doctorId: { type: string }
+                sessionId: { type: string }
+                date: { type: string }
+                paymentId: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Online token created and added to unified queue
+
+  /api/tokens/{tokenId}/status:
+    get:
+      summary: Patient Live Queue Status
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Live ETA, people ahead, doctor room info
+
+  /api/queue/{sessionId}/live:
+    get:
+      summary: Live Unified OPD Queue
+      description: Returns the single unified queue containing both ONLINE and PAPER tokens.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Active consultation and waiting queue list
+
+  /api/queue/{sessionId}/call-next:
+    post:
+      summary: Doctor calls next patient in queue
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Next token marked CALLED and SMS alert sent
+
+  /api/queue/{sessionId}/consultation-start:
+    post:
+      summary: Doctor starts consultation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokenId]
+              properties:
+                tokenId: { type: string }
+      responses:
+        '200':
+          description: Token marked IN_CONSULTATION
+
+  /api/queue/{sessionId}/consultation-complete:
+    post:
+      summary: Doctor completes consultation and triggers remaining queue re-forecast
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokenId]
+              properties:
+                tokenId: { type: string }
+      responses:
+        '200':
+          description: Consultation completed, queue reforecasted
+
+  /api/queue/{sessionId}/emergency:
+    post:
+      summary: Add emergency priority case to queue
+      description: Inserts emergency case at front of waiting list without disrupting current consultation.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hospitalId, opdId, doctorId, emergencyReason]
+              properties:
+                hospitalId: { type: string }
+                opdId: { type: string }
+                doctorId: { type: string }
+                patientName: { type: string, example: "Emergency Trauma Patient" }
+                patientPhone: { type: string, nullable: true }
+                emergencyReason: { type: string, example: "Severe chest pain" }
+      responses:
+        '201':
+          description: Emergency token created, future ETAs updated
+
+  /api/queue/{sessionId}/no-show:
+    post:
+      summary: Handle patient absent when called (initiates grace period or skips)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokenId]
+              properties:
+                tokenId: { type: string }
+      responses:
+        '200':
+          description: Grace period activated or token temporarily skipped
+
+  /api/queue/{sessionId}/re-entry:
+    post:
+      summary: Smart re-entry for returned no-show patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokenId]
+              properties:
+                tokenId: { type: string }
+                reason: { type: string, example: "Patient returned from pharmacy" }
+      responses:
+        '200':
+          description: Patient restored to queue and ETA reforecasted
+
+  /api/display/{hospitalId}:
+    get:
+      summary: Public Hospital Display Board Data
+      parameters:
+        - name: hospitalId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sanitized multi-OPD active and upcoming tokens
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
