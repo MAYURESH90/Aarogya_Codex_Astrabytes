@@ -49,7 +49,6 @@ export default function App() {
           <Route path="/track/:tokenId" element={<PatientTrackerPage />} />
           <Route path="/display/:hospitalId" element={<DisplayBoardPage />} />
           
-          {/* Role-Guarded Portals */}
           <Route path="/desk" element={
             <ProtectedRoute allowedRoles={['STAFF', 'ADMIN']}>
               <DeskStaffPage />
