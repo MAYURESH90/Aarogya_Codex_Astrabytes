@@ -1,0 +1,25 @@
+# Node.js dependencies
+node_modules/
+server/node_modules/
+
+# Python Virtual Environment
+prediction-service/venv/
+prediction-service/.venv/
+__pycache__/
+*.pyc
+
+# Environment Files
+.env
+server/.env
+*.env.local
+
+# Runtime Data & Uploads
+server/uploads/*
+!server/uploads/.gitkeep
+*.log
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
