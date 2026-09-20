@@ -19,7 +19,7 @@ export default function OnlineBookingPage() {
   useEffect(() => {
     const fetchOPDs = async () => {
       try {
-        const res = await axios.get(`${apiUrl}/opd`);
+        const res = await axios.get(`${apiUrl}/opds`);
         const opdList = Array.isArray(res.data) ? res.data : res.data?.data || [];
         setOpds(opdList);
         if (opdList.length > 0) {
@@ -39,8 +39,8 @@ export default function OnlineBookingPage() {
     setTokenResult(null);
 
     try {
-      const res = await axios.post(`${apiUrl}/tokens/online-book`, formData);
-      setTokenResult(res.data.data || res.data);
+      const res = await axios.post(`${apiUrl}/tokens/online`, formData);
+      setTokenResult(res.data?.data || res.data);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to book appointment. Please try again.");
     } finally {
