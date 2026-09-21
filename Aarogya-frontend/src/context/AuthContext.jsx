@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
   };
 
   const verifyOtp = async (phone, otp) => {
-    const res = await api.post('/auth/verify-otp', { phone, otp });
+    const res = await api.post('/auth/patient/verify-otp', { phone, otp });
     localStorage.setItem('aarogya_jwt', res.data.token);
     localStorage.setItem('aarogya_user', JSON.stringify(res.data.user));
     setUser(res.data.user);

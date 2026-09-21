@@ -25,6 +25,16 @@ const HospitalSchema = new mongoose.Schema({
     type: String,
     default: 'Asia/Kolkata'
   },
+  pinCode: {
+    type: String,
+    index: true,
+    trim: true
+  },
+  isGovernment: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   isActive: {
     type: Boolean,
     default: true

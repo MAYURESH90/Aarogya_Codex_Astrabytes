@@ -33,7 +33,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     try {
-      const res = await api.post('/auth/request-otp', { phone });
+      const res = await api.post('/auth/patient/send-otp', { phone });
       setOtpSent(true);
       if (res.data.devOtp) setDevOtp(res.data.devOtp);
     } catch (err) {

@@ -37,7 +37,7 @@ Demographic profile for clinical visits and medical continuity.
 
 ### 1.3 `hospitals` & `opds`
 Hospital facilities and clinical departments.
-- `Hospital`: `name`, `code` (Unique), `address`, `timezone` (`'Asia/Kolkata'`), `isActive`
+- `Hospital`: `name`, `code` (Unique), `address`, `pinCode` (String, Indexed), `isGovernment` (Boolean, Indexed), `timezone` (`'Asia/Kolkata'`), `isActive`
 - `OPD`: `hospitalId`, `name`, `code`, `department`, `roomNumber`, `isGeneralOPD` (Boolean), `paymentRequired` (Boolean), `consultationFee` (Number), `averageConsultationDuration` (Minutes)
 
 ### 1.4 `opdsessions`

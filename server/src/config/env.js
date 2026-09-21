@@ -12,6 +12,7 @@ module.exports = {
   TWILIO: {
     ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
     AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+    VERIFY_SERVICE_SID: process.env.TWILIO_VERIFY_SERVICE_SID || '',
     PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || '+10000000000'
   },
   PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER || 'SANDBOX',

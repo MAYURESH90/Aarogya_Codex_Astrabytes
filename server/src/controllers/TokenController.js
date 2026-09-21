@@ -83,6 +83,27 @@ class TokenController {
       }
 
       // Check payment requirement if not provided
+      // Idempotency: check if patient already booked this exact OPD/session recently
+      if (req.user?.patientId) {
+        const recentToken = await Token.findOne({
+          patientId: req.user.patientId,
+          hospitalId,
+          opdId,
+          sessionId,
+          date
+        });
+        if (recentToken) {
+          return res.status(409).json({
+            success: false,
+            error: {
+              code: 'DUPLICATE_BOOKING',
+              message: 'You have already booked a token for this session.'
+            },
+            data: recentToken
+          });
+        }
+      }
+
       const opd = await OPD.findById(opdId);
       if (opd && opd.paymentRequired && !paymentId) {
         return res.status(402).json({

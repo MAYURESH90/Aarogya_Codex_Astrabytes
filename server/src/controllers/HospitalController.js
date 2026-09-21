@@ -3,7 +3,14 @@ const { Hospital, OPD, Doctor, Specialist, DoctorSchedule, OPDSession } = requir
 class HospitalController {
   static async getHospitals(req, res, next) {
     try {
-      const hospitals = await Hospital.find({ isActive: true });
+      const query = { isActive: true };
+      if (req.query.pinCode) {
+        query.pinCode = req.query.pinCode;
+      }
+      if (req.query.isGovernment) {
+        query.isGovernment = req.query.isGovernment === 'true';
+      }
+      const hospitals = await Hospital.find(query);
       res.json({ success: true, data: hospitals });
     } catch (error) {
       next(error);

@@ -10,8 +10,10 @@ const paymentRoutes = require('./paymentRoutes');
 const displayRoutes = require('./displayRoutes');
 const ivrRoutes = require('./ivrRoutes');
 const adminRoutes = require('./adminRoutes');
+const patientRoutes = require('./patientRoutes');
 
 router.use('/auth', authRoutes);
+router.use('/patients', patientRoutes);
 router.use('/tokens', tokenRoutes);
 router.use('/queue', queueRoutes);
 router.use('/', hospitalRoutes);

@@ -7,10 +7,12 @@ const {
 const { ROLES, TOKEN_TYPES, TOKEN_STATUS } = require('../config/constants');
 const QueueService = require('../services/QueueService');
 
-const seedDatabase = async () => {
+const seedDatabase = async (closeDbConnection = true) => {
   try {
-    console.log('[Seed] Connecting to database...');
-    await connectDB();
+    console.log('[Seed] Checking database connection...');
+    if (closeDbConnection) {
+      await connectDB();
+    }
 
     console.log('[Seed] Clearing existing collections...');
     await Promise.all([
@@ -30,14 +32,16 @@ const seedDatabase = async () => {
 
     console.log('[Seed] Creating Hospital...');
     const hospital = await Hospital.create({
-      name: 'City Civil Government Hospital',
-      code: 'CCGH01',
+      name: 'Aarogya Demo Government Hospital',
+      code: 'DEMO-GOV-01',
       address: {
         street: '10 Hospital Road',
-        city: 'Mumbai',
+        city: 'Kalyan',
         state: 'Maharashtra',
-        pincode: '400001'
+        pincode: '421301'
       },
+      pinCode: '421301',
+      isGovernment: true,
       phone: '+912222334455',
       timezone: 'Asia/Kolkata'
     });
@@ -334,14 +338,16 @@ const seedDatabase = async () => {
     console.log('============================================================');
   } catch (error) {
     console.error('Seeding failed:', error);
-    process.exit(1);
+    if (closeDbConnection) process.exit(1);
   } finally {
-    await closeDB();
+    if (closeDbConnection) {
+      await closeDB();
+    }
   }
 };
 
 if (require.main === module) {
-  seedDatabase();
+  seedDatabase(true);
 }
 
 module.exports = seedDatabase;

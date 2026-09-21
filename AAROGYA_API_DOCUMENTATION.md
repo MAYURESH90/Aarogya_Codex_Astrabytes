@@ -8,36 +8,30 @@
 
 ## 1. Authentication Endpoints
 
-### Register User
+### Register User (Staff/Admin/Doctor)
 `POST /api/auth/register`  
-Creates a patient or hospital personnel user account.
+Creates a hospital personnel user account.
 ```json
 // Request Body
 {
   "name": "Rajesh Sharma",
   "phone": "+919876543210",
   "password": "Password@123",
-  "role": "PATIENT" // "PATIENT" | "STAFF" | "DOCTOR" | "ADMIN"
-}
-// Response (201 Created)
-{
-  "success": true,
-  "message": "User registered successfully. OTP sent for phone verification.",
-  "userId": "66e9a8f...",
-  "role": "PATIENT"
+  "role": "STAFF" // "STAFF" | "DOCTOR" | "ADMIN"
 }
 ```
 
-### Request Phone OTP
-`POST /api/auth/request-otp`
+### Request Patient Phone OTP
+`POST /api/auth/patient/send-otp`
 ```json
 {
   "phone": "+919876543210"
 }
 ```
+*Note: If the patient does not exist, an account is automatically created (Passwordless flow).*
 
-### Verify OTP & Receive JWT
-`POST /api/auth/verify-otp`
+### Verify Patient OTP & Receive JWT
+`POST /api/auth/patient/verify-otp`
 ```json
 // Request Body
 {
@@ -50,13 +44,24 @@ Creates a patient or hospital personnel user account.
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
   "user": {
     "id": "66e9a8f...",
-    "name": "Rajesh Sharma",
     "phone": "+919876543210",
     "role": "PATIENT"
   }
 }
 ```
 
+### Get Patient Profile
+`GET /api/patients/me`
+
+### Update Patient Profile
+`PUT /api/patients/me`
+```json
+{
+  "name": "Rajesh Sharma",
+  "gender": "MALE",
+  "dateOfBirth": "1990-01-01T00:00:00.000Z"
+}
+```
 ---
 
 ## 2. Token & Unified Queue Endpoints

@@ -18,6 +18,24 @@ const startServer = async () => {
     // Initialize Redis cache & distributed lock
     getRedisClient();
 
+    // Auto-seed demo data when the database is empty (e.g. in-memory MongoDB on each restart)
+    if (env.NODE_ENV !== 'production') {
+      try {
+        const Hospital = require('./models/Hospital');
+        const hospitalCount = await Hospital.countDocuments();
+        if (hospitalCount === 0) {
+          console.log('[AutoSeed] No hospitals found — running demo seed data...');
+          const seedDatabase = require('./seed/seedData');
+          await seedDatabase(false); // false = DB already connected, don't reconnect/close
+          console.log('[AutoSeed] Demo seed data loaded successfully.');
+        } else {
+          console.log(`[AutoSeed] Database already has ${hospitalCount} hospital(s) — skipping auto-seed.`);
+        }
+      } catch (seedErr) {
+        console.warn('[AutoSeed] Seed failed (non-fatal):', seedErr.message);
+      }
+    }
+
     server.listen(env.PORT, () => {
       console.log('============================================================');
       console.log(` AAROGYA BACKEND SERVER ACTIVE ON PORT ${env.PORT}`);

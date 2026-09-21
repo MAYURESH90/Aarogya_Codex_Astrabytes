@@ -97,11 +97,12 @@ npm test
 
 ## Test Credentials (from Seed)
 
-| Role | Phone Number | Password |
+| Role | Phone Number | Password / Auth |
 |---|---|---|
 | **Admin** | `+919000000001` | `Aarogya@123` |
 | **Desk Staff** | `+919000000002` | `Aarogya@123` |
 | **Doctor (General)** | `+919000000003` | `Aarogya@123` |
-| **Doctor (Cardiology Specialist)**| `+919000000004` | `Aarogya@123` |
-| **Patient 1** | `+919111111101` | `Aarogya@123` |
-| **Patient 2** | `+919111111102` | `Aarogya@123` |
+| **Doctor (Cardiology)**| `+919000000004` | `Aarogya@123` |
+| **Patient** | *Any Valid Phone*| `OTP via Twilio Verify` |
+
+*Note: For patients, use the real phone number as Twilio Verify is integrated. In development mode without Twilio, OTP defaults to `123456`.*
