@@ -137,6 +137,7 @@ export default function MedicalRecordsPage() {
         <form onSubmit={handleUpload} className="flex items-center gap-2">
           <input
             type="file"
+            accept="image/*,application/pdf"
             onChange={(e) => setFile(e.target.files[0])}
             className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-white file:text-slate-700 file:border-slate-300 file:shadow-sm"
           />

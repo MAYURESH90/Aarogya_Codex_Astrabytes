@@ -1,4 +1,4 @@
-const { Consultation, Prescription, Report, Token, Consent, Patient } = require('../models');
+const { Consultation, Prescription, Report, Token, Consent, Patient, Document } = require('../models');
 const AuditService = require('./AuditService');
 
 class MedicalRecordService {
@@ -65,6 +65,8 @@ class MedicalRecordService {
     const consultations = await Consultation.find({ patientId }).populate('doctorId').sort({ startedAt: -1 });
     const prescriptions = await Prescription.find({ patientId }).populate('doctorId').sort({ issuedAt: -1 });
     const reports = await Report.find({ patientId }).sort({ date: -1 });
+    // BUG 1 FIX: include uploaded Document records in the timeline
+    const documents = await Document.find({ patientId }).sort({ createdAt: -1 });
 
     // Aggregate into unified chronological timeline
     const timeline = [];
@@ -122,6 +124,24 @@ class MedicalRecordService {
           reportType: r.reportType,
           fileUrl: r.fileUrl,
           summary: r.summary
+        }
+      });
+    }
+
+    // BUG 1 FIX: add Document records
+    for (const d of documents) {
+      timeline.push({
+        type: 'DOCUMENT_UPLOAD',
+        id: d._id,
+        date: d.createdAt,
+        details: {
+          title: d.originalName,
+          ocrStatus: d.ocrStatus,
+          ocrExtractedText: d.ocrExtractedText || null,
+          extractedMedicines: d.ocrExtractedFields?.medicines || [],
+          extractedInstructions: d.ocrExtractedFields?.instructions || [],
+          mimeType: d.mimeType,
+          fileSize: d.fileSize
         }
       });
     }

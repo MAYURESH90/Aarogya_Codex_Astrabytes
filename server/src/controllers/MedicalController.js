@@ -201,8 +201,37 @@ class MedicalController {
         });
       }
 
-      const { patientId } = req.body;
-      const targetPatientId = patientId || req.user.patientId;
+      let targetPatientId;
+
+      if (req.user.role === 'PATIENT') {
+        // BUG 2 FIX: For patients, ALWAYS derive patientId from the authenticated user.
+        // Never trust a patientId supplied by the frontend — this prevents cross-patient upload.
+        const patientRecord = await Patient.findOne({ userId: req.user._id });
+        if (!patientRecord) {
+          return res.status(404).json({
+            success: false,
+            error: {
+              code: 'PATIENT_RECORD_NOT_FOUND',
+              message: 'No patient profile is linked to your account. Please complete your profile first.'
+            }
+          });
+        }
+        targetPatientId = patientRecord._id;
+      } else {
+        // Staff / Doctor / Admin: may upload on behalf of a patient (existing authorised behaviour).
+        // Require an explicit patientId in this case.
+        const { patientId } = req.body;
+        if (!patientId) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'PATIENT_ID_REQUIRED',
+              message: 'patientId is required when uploading on behalf of a patient.'
+            }
+          });
+        }
+        targetPatientId = patientId;
+      }
 
       // Extract text via OCR abstraction
       const ocrResult = await OCRService.extractText(req.file.path, req.file.mimetype);
