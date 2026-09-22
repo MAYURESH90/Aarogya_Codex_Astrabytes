@@ -6,6 +6,7 @@ const roleMiddleware = require('../middleware/roleMiddleware');
 
 // Public patient live status lookup
 router.get('/:tokenId/status', TokenController.getTokenStatus);
+router.get('/:tokenId/eta', TokenController.getTokenETA);
 router.get('/:tokenId', TokenController.getTokenById);
 
 // Online token registration (Patient role or authorized)

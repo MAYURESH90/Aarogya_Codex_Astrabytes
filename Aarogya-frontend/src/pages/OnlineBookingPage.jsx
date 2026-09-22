@@ -238,17 +238,66 @@ export default function OnlineBookingPage() {
       {tokenResult ? (
         <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-3">
           <div className="text-xs font-bold uppercase tracking-wider text-emerald-600">Booking Confirmed</div>
-          <div className="text-4xl font-extrabold text-slate-900">{tokenResult.tokenNumber || "Token Generated"}</div>
+          
+          <div className="text-left bg-white p-4 rounded-lg shadow-sm border border-emerald-100 my-4 space-y-2 max-w-sm mx-auto">
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500 font-bold uppercase">Patient</span>
+              <span className="text-sm font-semibold text-slate-800">{user?.name || formData.patientName || "Patient"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500 font-bold uppercase">Token ID</span>
+              <span className="text-lg font-black text-slate-900">{tokenResult.token?.tokenNumber || "N/A"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500 font-bold uppercase">Queue Position</span>
+              <span className="text-sm font-semibold text-slate-800">{tokenResult.token?.queuePosition ?? "N/A"}</span>
+            </div>
+            {tokenResult.prediction?.predictedWaitMinutes !== undefined && (
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 font-bold uppercase">Estimated Wait</span>
+                <span className="text-sm font-semibold text-sky-700">{tokenResult.prediction.predictedWaitMinutes} mins</span>
+              </div>
+            )}
+            {tokenResult.prediction?.estimatedConsultationTime && (
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 font-bold uppercase">Expected Consultation</span>
+                <span className="text-sm font-semibold text-slate-800">{new Date(tokenResult.prediction.estimatedConsultationTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500 font-bold uppercase">Status</span>
+              <span className="text-sm font-semibold text-emerald-700">{tokenResult.token?.status || "WAITING"}</span>
+            </div>
+            {tokenResult.prediction?.predictionSource && (
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 font-bold uppercase">Prediction Source</span>
+                <span className="text-sm font-semibold text-slate-800">{tokenResult.prediction.predictionSource}</span>
+              </div>
+            )}
+          </div>
+
           <p className="text-sm text-slate-600">Please present this token at the registration desk upon arrival.</p>
-          {tokenResult.predictedWaitMinutes !== undefined && (
-            <p className="text-sm font-medium text-slate-800">Predicted Wait: {tokenResult.predictedWaitMinutes} mins</p>
-          )}
-          <button
-            onClick={() => setTokenResult(null)}
-            className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700"
-          >
-            Book Another Token
-          </button>
+          
+          <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (tokenResult.token?.id) {
+                  window.location.href = `/track/${tokenResult.token.id}`;
+                }
+              }}
+              className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900"
+            >
+              View Live Queue
+            </button>
+            <button
+              type="button"
+              onClick={() => setTokenResult(null)}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700"
+            >
+              Book Another Token
+            </button>
+          </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">

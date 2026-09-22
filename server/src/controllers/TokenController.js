@@ -117,8 +117,8 @@ class TokenController {
 
       const result = await TokenService.registerOnlineToken({
         patientId: req.user?.patientId || null,
-        patientName: patientName || req.user?.name || 'Online Patient',
-        patientPhone: patientPhone || req.user?.phone || null,
+        patientName: req.user?.name || 'Online Patient',
+        patientPhone: req.user?.phone || null,
         hospitalId,
         opdId,
         doctorId,
@@ -168,6 +168,27 @@ class TokenController {
       res.json({
         success: true,
         data: status
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get ETA Refresh
+   * GET /api/tokens/:tokenId/eta
+   */
+  static async getTokenETA(req, res, next) {
+    try {
+      const status = await TokenService.getTokenStatus(req.params.tokenId);
+      res.json({
+        success: true,
+        data: {
+          predictedWaitMinutes: status.predictedWaitMinutes,
+          estimatedConsultationTime: status.estimatedConsultationTime,
+          predictionSource: status.predictionSource,
+          confidence: status.confidence
+        }
       });
     } catch (error) {
       next(error);

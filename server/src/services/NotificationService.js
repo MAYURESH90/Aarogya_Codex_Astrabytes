@@ -47,11 +47,22 @@ class NotificationService {
 
     // Dispatch via Twilio if configured
     if (env.TWILIO.ACCOUNT_SID && env.TWILIO.AUTH_TOKEN) {
+      if (!env.TWILIO.MESSAGING_SERVICE_SID) {
+        console.log(`\n[SMS DEV MODE]`);
+        console.log(`To: ${recipientPhone}`);
+        console.log(`Message:\n${message}\n`);
+        return {
+          attempted: false,
+          mode: 'development',
+          reason: 'Messaging Service not configured'
+        };
+      }
+
       try {
         const twilio = require('twilio')(env.TWILIO.ACCOUNT_SID, env.TWILIO.AUTH_TOKEN);
         const result = await twilio.messages.create({
           body: message,
-          from: env.TWILIO.PHONE_NUMBER,
+          messagingServiceSid: env.TWILIO.MESSAGING_SERVICE_SID,
           to: recipientPhone
         });
         providerMessageId = result.sid;

@@ -150,13 +150,14 @@ class TokenService {
   }) {
     const lockKey = await QueueService.acquireSessionLock(sessionId);
     try {
-      // 1. Auto-generate collision-free online token number (e.g. O101, O102...)
+      // 1. Auto-generate collision-free online token number (e.g. ARO-001)
       const count = await Token.countDocuments({ sessionId, tokenType: TOKEN_TYPES.ONLINE });
-      const tokenNumber = `O${String(101 + count)}`;
+      const paddedCount = String(count + 1).padStart(3, '0');
+      const tokenNumber = `ARO-${paddedCount}`;
 
       // Check collision
       const existing = await Token.findOne({ sessionId, tokenNumber });
-      const finalTokenNumber = existing ? `O${String(101 + count + Math.floor(Math.random() * 100))}` : tokenNumber;
+      const finalTokenNumber = existing ? `ARO-${String(count + 1 + Math.floor(Math.random() * 100)).padStart(3, '0')}` : tokenNumber;
 
       const waitingCount = await Token.countDocuments({
         sessionId,
@@ -250,6 +251,7 @@ class TokenService {
 
     return {
       tokenId: token._id,
+      sessionId: token.sessionId._id,
       tokenNumber: token.tokenNumber,
       tokenType: token.tokenType,
       queuePosition: token.queuePosition,
