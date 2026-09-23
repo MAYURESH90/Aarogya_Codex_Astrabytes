@@ -92,6 +92,23 @@ class NotificationService {
       sentAt: new Date()
     });
 
+    // Broadcast real-time SMS to UI live simulation widgets via Socket.IO
+    try {
+      const RealtimeService = require('./RealtimeService');
+      RealtimeService.emitSMSNotification({
+        notificationId: record._id,
+        type: record.type,
+        recipientPhone,
+        message,
+        status,
+        tokenId,
+        tokenNumber,
+        sentAt: record.sentAt
+      });
+    } catch (realtimeErr) {
+      console.warn('[NotificationService] Socket.IO SMS emit warning:', realtimeErr.message);
+    }
+
     return {
       success: status === 'SENT',
       notificationId: record._id,

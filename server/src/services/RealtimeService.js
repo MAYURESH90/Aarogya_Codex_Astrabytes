@@ -25,6 +25,14 @@ class RealtimeService {
       socket.on('join_display', (hospitalId) => {
         socket.join(`display_${hospitalId}`);
       });
+
+      // Phone room for custom phone number live SMS simulation
+      socket.on('join_phone', (phone) => {
+        if (phone) {
+          const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+          socket.join(`phone_${cleanPhone}`);
+        }
+      });
     });
 
     console.log('[RealtimeService] Socket.IO server initialized.');
@@ -33,6 +41,26 @@ class RealtimeService {
 
   static getIO() {
     return ioInstance;
+  }
+
+  /**
+   * Broadcast real-time SMS notification to patient's token, phone room, and global feed
+   */
+  static emitSMSNotification(smsData) {
+    if (!ioInstance) return;
+    const payload = {
+      timestamp: new Date().toISOString(),
+      ...smsData
+    };
+
+    if (smsData.tokenId) {
+      ioInstance.to(`token_${smsData.tokenId}`).emit('sms_notification', payload);
+    }
+    if (smsData.recipientPhone) {
+      const cleanPhone = String(smsData.recipientPhone).replace(/[^0-9]/g, '');
+      ioInstance.to(`phone_${cleanPhone}`).emit('sms_notification', payload);
+    }
+    ioInstance.emit('global_sms_notification', payload);
   }
 
   /**

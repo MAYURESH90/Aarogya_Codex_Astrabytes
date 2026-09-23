@@ -198,12 +198,20 @@ class TokenService {
         }
       });
 
-      const refreshedToken = await Token.findById(token._id);
+      const refreshedToken = await Token.findById(token._id)
+        .populate('hospitalId opdId doctorId');
+
+      const shortHex = refreshedToken._id.toString().slice(-4).toUpperCase();
+      const digitalTokenId = `#TKN-${shortHex}`;
 
       if (patientPhone) {
+        const estTimeStr = refreshedToken.estimatedConsultationTime
+          ? new Date(refreshedToken.estimatedConsultationTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+          : 'Pending';
+
         await NotificationService.sendSMS({
           recipientPhone: patientPhone,
-          message: `Aarogya Token Confirmed: ${refreshedToken.tokenNumber}. Current position #${refreshedToken.queuePosition}. Estimated consultation: ~${new Date(refreshedToken.estimatedConsultationTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}.`,
+          message: `Aarogya Appointment Confirmed! Digital Token ID: ${digitalTokenId} (${refreshedToken.tokenNumber}). Patient: ${patientName || 'Patient'}. Doctor: ${refreshedToken.doctorId?.name || 'Assigned Doctor'} (${refreshedToken.opdId?.name || 'OPD'}). Position: #${refreshedToken.queuePosition}, Est. Wait: ~${refreshedToken.predictedWaitMinutes} mins (expected ~${estTimeStr}). Next steps: Proceed to OPD Room ${refreshedToken.opdId?.roomNumber || '101'} when called.`,
           type: 'TOKEN_CONFIRMATION',
           tokenId: refreshedToken._id,
           tokenNumber: refreshedToken.tokenNumber,
@@ -216,10 +224,20 @@ class TokenService {
         success: true,
         token: {
           id: refreshedToken._id,
+          digitalTokenId,
           tokenNumber: refreshedToken.tokenNumber,
           tokenType: refreshedToken.tokenType,
           queuePosition: refreshedToken.queuePosition,
-          status: refreshedToken.status
+          status: refreshedToken.status,
+          patientName: refreshedToken.patientName,
+          patientPhone: refreshedToken.patientPhone,
+          createdAt: refreshedToken.createdAt || refreshedToken.joinedAt,
+          hospitalName: refreshedToken.hospitalId?.name,
+          opdName: refreshedToken.opdId?.name,
+          roomNumber: refreshedToken.opdId?.roomNumber,
+          doctorName: refreshedToken.doctorId?.name,
+          specialization: refreshedToken.doctorId?.specialization,
+          sessionId: refreshedToken.sessionId
         },
         prediction: {
           predictedWaitMinutes: refreshedToken.predictedWaitMinutes,
@@ -249,11 +267,17 @@ class TokenService {
       queuePosition: { $lt: token.queuePosition }
     });
 
+    const shortHex = token._id.toString().slice(-4).toUpperCase();
+    const digitalTokenId = `#TKN-${shortHex}`;
+
     return {
       tokenId: token._id,
+      digitalTokenId,
       sessionId: token.sessionId._id,
       tokenNumber: token.tokenNumber,
       tokenType: token.tokenType,
+      patientName: token.patientName,
+      patientPhone: token.patientPhone,
       queuePosition: token.queuePosition,
       peopleAhead: waitingAhead,
       status: token.status,

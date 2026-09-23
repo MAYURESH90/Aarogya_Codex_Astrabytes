@@ -117,8 +117,8 @@ class TokenController {
 
       const result = await TokenService.registerOnlineToken({
         patientId: req.user?.patientId || null,
-        patientName: req.user?.name || 'Online Patient',
-        patientPhone: req.user?.phone || null,
+        patientName: patientName || req.user?.name || 'Online Patient',
+        patientPhone: patientPhone || req.user?.phone || null,
         hospitalId,
         opdId,
         doctorId,

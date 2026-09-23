@@ -414,6 +414,21 @@ class QueueService {
         }
       });
 
+      // Automated Post-Appointment SMS Dispatch with Next Steps & Exit Pass details
+      if (token.patientPhone) {
+        const shortHex = token._id.toString().slice(-4).toUpperCase();
+        const digitalTokenId = `#TKN-${shortHex}`;
+        await NotificationService.sendSMS({
+          recipientPhone: token.patientPhone,
+          message: `Aarogya Post-Appointment Summary: Consultation concluded for Token ID ${digitalTokenId} (${token.tokenNumber}). Patient: ${token.patientName}. Next steps: Please proceed to Pharmacy / Billing Counter #3 for medication prescription & digital exit pass clearance.`,
+          type: NOTIFICATION_TYPES.CONSULTATION_COMPLETE,
+          tokenId: token._id,
+          tokenNumber: token.tokenNumber,
+          patientId: token.patientId,
+          force: true
+        });
+      }
+
       return {
         success: true,
         token,

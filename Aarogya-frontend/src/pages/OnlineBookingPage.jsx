@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import LiveSmsInbox from "../components/LiveSmsInbox";
+import { socket, joinTokenRoom, joinSessionRoom } from "../services/socket";
+import { Clock, Users, Building2, User, Activity, CheckCircle, Phone, Smartphone, AlertCircle, FileText } from 'lucide-react';
 
 export default function OnlineBookingPage() {
   const { user } = useAuth();
   
-  const [pinCodeSearch, setPinCodeSearch] = useState("");
+  const [pinCodeSearch, setPinCodeSearch] = useState("421301");
   const [searched, setSearched] = useState(false);
   
   const [hospitals, setHospitals] = useState([]);
@@ -20,12 +23,13 @@ export default function OnlineBookingPage() {
     opdId: "",
     specialistId: "",
     patientName: "",
-    phone: "",
-    age: "",
+    phone: "+91 ",
+    age: "30",
     gender: "MALE",
   });
 
   const [tokenResult, setTokenResult] = useState(null);
+  const [queueData, setQueueData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,10 +40,9 @@ export default function OnlineBookingPage() {
     if (user && user.role === 'PATIENT') {
       setFormData(prev => ({
         ...prev,
-        patientName: user.name || "",
-        phone: user.phone || ""
+        patientName: user.name || prev.patientName,
+        phone: user.phone || prev.phone
       }));
-      // Fetch more details from /patients/me
       const fetchPatient = async () => {
         try {
           const res = await axios.get(`${apiUrl}/patients/me`, {
@@ -48,8 +51,9 @@ export default function OnlineBookingPage() {
           const patient = res.data.data;
           setFormData(prev => ({
             ...prev,
-            gender: patient.gender || "MALE",
-            age: patient.dateOfBirth ? Math.floor((new Date() - new Date(patient.dateOfBirth).getTime()) / 3.15576e+10) : prev.age
+            gender: patient.gender || prev.gender,
+            phone: patient.phone || prev.phone,
+            patientName: patient.name || prev.patientName
           }));
         } catch (e) {
           console.error("Failed to load patient profile:", e);
@@ -77,11 +81,16 @@ export default function OnlineBookingPage() {
       }
     } catch (err) {
       console.error("Failed to fetch hospitals:", err);
-      setError("Failed to fetch hospitals");
+      setError("Failed to fetch hospitals. Please check server connection.");
     } finally {
       setLoading(false);
     }
   };
+
+  // Auto-search on mount
+  useEffect(() => {
+    searchHospitals();
+  }, []);
 
   // Fetch OPDs & Specialists whenever hospital changes
   useEffect(() => {
@@ -92,7 +101,6 @@ export default function OnlineBookingPage() {
     }
 
     const fetchDepartmentsAndSpecialists = async () => {
-      // Fetch General OPDs
       try {
         let res;
         try {
@@ -115,7 +123,6 @@ export default function OnlineBookingPage() {
         console.error("Failed to load OPDs:", err);
       }
 
-      // Fetch Specialists
       try {
         const res = await axios.get(`${apiUrl}/specialists`, { params: { hospitalId: formData.hospitalId } });
         const specList = Array.isArray(res.data) ? res.data : res.data?.data || [];
@@ -140,45 +147,61 @@ export default function OnlineBookingPage() {
     fetchDepartmentsAndSpecialists();
   }, [apiUrl, formData.hospitalId]);
 
+  // Live Queue Fetch & Real-time Socket Subscription when Token is generated
+  useEffect(() => {
+    if (!tokenResult?.token?.sessionId) return;
+    const sessionId = tokenResult.token.sessionId;
+    const tokenId = tokenResult.token.id;
+
+    joinSessionRoom(sessionId);
+    joinTokenRoom(tokenId);
+
+    const fetchLiveQueue = async () => {
+      try {
+        const res = await axios.get(`${apiUrl}/queue/${sessionId}/live`);
+        setQueueData(res.data?.data || res.data);
+      } catch (e) {
+        console.error("Failed to fetch live queue:", e);
+      }
+    };
+
+    fetchLiveQueue();
+
+    const handleQueueUpdate = () => {
+      fetchLiveQueue();
+    };
+
+    socket.on('queue_update', handleQueueUpdate);
+    socket.on('token_eta_update', handleQueueUpdate);
+
+    return () => {
+      socket.off('queue_update', handleQueueUpdate);
+      socket.off('token_eta_update', handleQueueUpdate);
+    };
+  }, [tokenResult, apiUrl]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     setTokenResult(null);
+    setQueueData(null);
     
+    // Format custom phone number cleanly
+    let rawPhone = formData.phone ? formData.phone.trim() : "";
+    if (rawPhone && !rawPhone.startsWith("+")) {
+      rawPhone = `+91${rawPhone.replace(/^0+/, '')}`;
+    }
+
+    if (!rawPhone || rawPhone.length < 10) {
+      setError("Please provide a valid recipient phone number for SMS notifications.");
+      setLoading(false);
+      return;
+    }
+
     const token = localStorage.getItem('aarogya_jwt');
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    // 1. Update patient profile first if logged in
-    if (user && user.role === 'PATIENT') {
-      try {
-        // approximate DOB from age for simplicity
-        const dateOfBirth = new Date();
-        dateOfBirth.setFullYear(dateOfBirth.getFullYear() - Number(formData.age));
-        
-        await axios.put(`${apiUrl}/patients/me`, {
-          name: formData.patientName,
-          gender: formData.gender,
-          dateOfBirth: dateOfBirth.toISOString()
-        }, { headers });
-      } catch (err) {
-        console.error("Failed to update patient profile:", err);
-      }
-    }
-
-    const payload = {
-      hospitalId: formData.hospitalId,
-      opdId: consultationType === "GENERAL" ? formData.opdId : undefined,
-      specialistId: consultationType === "SPECIALIST" ? formData.specialistId : undefined,
-      consultationType,
-      patientName: formData.patientName,
-      patientPhone: formData.phone.startsWith("+91") ? formData.phone : `+91${formData.phone.trim()}`,
-      // Assume first session for simplicity if not selectable in UI yet
-      sessionId: "auto" 
-    };
-    
-    // We must pass sessionId according to backend requirements, but backend usually handles "auto" or we need to fetch sessions.
-    // For now, if we don't have sessionId, we will fetch the first active session for this doctor/OPD to inject it.
     let sessionIdToUse = "";
     try {
       const docId = consultationType === "GENERAL" ? undefined : formData.specialistId;
@@ -194,27 +217,41 @@ export default function OnlineBookingPage() {
     }
     
     if (!sessionIdToUse) {
-      setError("No active sessions found for this OPD/Doctor.");
+      setError("No active OPD sessions found for the selected department/doctor. Please select another OPD.");
       setLoading(false);
       return;
     }
-    
-    payload.sessionId = sessionIdToUse;
-    // We also need doctorId if general
+
+    let doctorIdToUse = formData.specialistId;
     if (consultationType === "GENERAL") {
       try {
         const dres = await axios.get(`${apiUrl}/doctors`, { params: { opdId: formData.opdId }});
         if (dres.data?.data?.length > 0) {
-          payload.doctorId = dres.data.data[0]._id;
+          doctorIdToUse = dres.data.data[0]._id;
         }
       } catch (err) {}
-    } else {
-      payload.doctorId = formData.specialistId;
     }
+
+    const payload = {
+      hospitalId: formData.hospitalId,
+      opdId: consultationType === "GENERAL" ? formData.opdId : undefined,
+      specialistId: consultationType === "SPECIALIST" ? formData.specialistId : undefined,
+      doctorId: doctorIdToUse,
+      consultationType,
+      patientName: formData.patientName || "Patient",
+      patientPhone: rawPhone,
+      sessionId: sessionIdToUse
+    };
 
     try {
       const res = await axios.post(`${apiUrl}/tokens/online`, payload, { headers });
-      setTokenResult(res.data?.data || res.data);
+      const data = res.data?.data || res.data;
+      
+      // Ensure digitalTokenId fallback if missing
+      if (data.token && !data.token.digitalTokenId && data.token.id) {
+        data.token.digitalTokenId = `#TKN-${data.token.id.slice(-4).toUpperCase()}`;
+      }
+      setTokenResult(data);
     } catch (err) {
       setError(err.response?.data?.error?.message || err.response?.data?.message || "Failed to book token. Please try again.");
     } finally {
@@ -223,93 +260,191 @@ export default function OnlineBookingPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto my-10 p-6 bg-white border border-slate-200 rounded-2xl shadow-sm font-sans">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Online OPD & Specialist Booking</h1>
-        <p className="text-sm text-slate-500 mt-1">Select your hospital, pick a department or specialist, and generate your queue token.</p>
+    <div className="max-w-3xl mx-auto my-8 p-4 sm:p-6 space-y-6 font-sans">
+      <div className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-900">Hospital Appointment Booking & Digital Token Generation</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Select your hospital department, enter your target mobile number for live SMS updates, and track your queue in real-time.
+        </p>
       </div>
 
       {error && (
-        <div className="p-3 mb-5 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg">
-          {error}
+        <div className="p-4 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+          <span>{error}</span>
         </div>
       )}
 
+      {/* Booking Form / Token Result View */}
       {tokenResult ? (
-        <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-3">
-          <div className="text-xs font-bold uppercase tracking-wider text-emerald-600">Booking Confirmed</div>
-          
-          <div className="text-left bg-white p-4 rounded-lg shadow-sm border border-emerald-100 my-4 space-y-2 max-w-sm mx-auto">
-            <div className="flex justify-between">
-              <span className="text-xs text-slate-500 font-bold uppercase">Patient</span>
-              <span className="text-sm font-semibold text-slate-800">{user?.name || formData.patientName || "Patient"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-xs text-slate-500 font-bold uppercase">Token ID</span>
-              <span className="text-lg font-black text-slate-900">{tokenResult.token?.tokenNumber || "N/A"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-xs text-slate-500 font-bold uppercase">Queue Position</span>
-              <span className="text-sm font-semibold text-slate-800">{tokenResult.token?.queuePosition ?? "N/A"}</span>
-            </div>
-            {tokenResult.prediction?.predictedWaitMinutes !== undefined && (
-              <div className="flex justify-between">
-                <span className="text-xs text-slate-500 font-bold uppercase">Estimated Wait</span>
-                <span className="text-sm font-semibold text-sky-700">{tokenResult.prediction.predictedWaitMinutes} mins</span>
+        <div className="space-y-6">
+          {/* Post-Booking Token Confirmation Card */}
+          <div className="p-6 bg-gradient-to-br from-emerald-50 via-white to-sky-50 border border-emerald-200 rounded-2xl shadow-md text-left space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-emerald-100 pb-4 gap-2">
+              <div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Booking Confirmed & Token Generated
+                </span>
+                <h2 className="text-xl font-bold text-slate-900 mt-2">
+                  Token ID: <span className="text-emerald-700 font-mono text-2xl tracking-tight">{tokenResult.token?.digitalTokenId || `#TKN-${tokenResult.token?.id?.slice(-4).toUpperCase()}`}</span>
+                </h2>
               </div>
-            )}
-            {tokenResult.prediction?.estimatedConsultationTime && (
-              <div className="flex justify-between">
-                <span className="text-xs text-slate-500 font-bold uppercase">Expected Consultation</span>
-                <span className="text-sm font-semibold text-slate-800">{new Date(tokenResult.prediction.estimatedConsultationTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+              <div className="text-right">
+                <span className="text-xs text-slate-500 uppercase font-bold block">Token Number</span>
+                <span className="text-3xl font-black text-slate-900">{tokenResult.token?.tokenNumber || "O101"}</span>
               </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-xs text-slate-500 font-bold uppercase">Status</span>
-              <span className="text-sm font-semibold text-emerald-700">{tokenResult.token?.status || "WAITING"}</span>
             </div>
-            {tokenResult.prediction?.predictionSource && (
-              <div className="flex justify-between">
-                <span className="text-xs text-slate-500 font-bold uppercase">Prediction Source</span>
-                <span className="text-sm font-semibold text-slate-800">{tokenResult.prediction.predictionSource}</span>
+
+            {/* Comprehensive Token Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[10px] block">Patient Details</span>
+                <p className="text-sm font-bold text-slate-900 mt-0.5">{tokenResult.token?.patientName || formData.patientName || "Patient"}</p>
+                <p className="text-slate-600 font-mono mt-0.5 flex items-center gap-1">
+                  <Smartphone className="w-3.5 h-3.5 text-sky-600" /> Recipient: <strong>{tokenResult.token?.patientPhone || formData.phone}</strong>
+                </p>
               </div>
+
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[10px] block">Doctor & OPD Department</span>
+                <p className="text-sm font-bold text-slate-900 mt-0.5">{tokenResult.token?.doctorName || "Assigned Specialist"}</p>
+                <p className="text-slate-600 mt-0.5">
+                  {tokenResult.token?.opdName || "General OPD"} — Room <strong>{tokenResult.token?.roomNumber || "101"}</strong>
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <span className="text-slate-500 font-bold uppercase text-[10px] block">Current Queue Position</span>
+                <p className="text-xl font-black text-slate-900 mt-0.5">
+                  #{tokenResult.token?.queuePosition ?? "1"}
+                </p>
+              </div>
+
+              <div className="p-3 bg-sky-50 rounded-lg">
+                <span className="text-sky-700 font-bold uppercase text-[10px] block">Estimated Wait Time</span>
+                <p className="text-xl font-black text-sky-900 mt-0.5">
+                  {tokenResult.prediction?.predictedWaitMinutes ?? "10"} <span className="text-xs font-normal text-sky-700">mins</span>
+                </p>
+                {tokenResult.prediction?.estimatedConsultationTime && (
+                  <span className="text-[11px] text-sky-700 font-semibold block mt-0.5">
+                    Expected: {new Date(tokenResult.prediction.estimatedConsultationTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Automated SMS Notice */}
+            <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center gap-2.5 text-xs text-sky-800">
+              <Phone className="w-4 h-4 text-sky-600 shrink-0" />
+              <span>
+                Automated confirmation SMS & live status alerts dispatched to <strong>{tokenResult.token?.patientPhone || formData.phone}</strong>.
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setTokenResult(null)}
+                className="px-4 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors"
+              >
+                + Book Another Appointment
+              </button>
+            </div>
+          </div>
+
+          {/* Integrated Live OPD Queue Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-sky-600" />
+                Live OPD Queue Status
+              </h2>
+              <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Real-time Sync Active
+              </span>
+            </div>
+
+            {queueData ? (
+              <div className="space-y-4">
+                {/* Currently Consulting */}
+                <div>
+                  <div className="text-xs font-bold uppercase text-slate-400 mb-2 tracking-wider">Currently Consulting</div>
+                  {queueData.currentConsultation ? (
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl font-black text-emerald-900">{queueData.currentConsultation.tokenNumber}</span>
+                        <span className="px-2.5 py-1 bg-emerald-200 text-emerald-800 text-xs font-bold rounded-md">IN ROOM {tokenResult.token?.roomNumber || "101"}</span>
+                      </div>
+                      <span className="text-xs font-medium text-emerald-700">{queueData.currentConsultation.elapsedMinutes || 2} mins elapsed</span>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-500 italic">
+                      No patient currently inside consultation room.
+                    </div>
+                  )}
+                </div>
+
+                {/* Waiting List */}
+                <div>
+                  <div className="text-xs font-bold uppercase text-slate-400 mb-2 tracking-wider">
+                    Waiting List ({queueData.unifiedQueue?.length || 0} Patients)
+                  </div>
+                  {queueData.unifiedQueue && queueData.unifiedQueue.length > 0 ? (
+                    <div className="space-y-2">
+                      {queueData.unifiedQueue.map((qToken) => {
+                        const isMyToken = qToken.tokenNumber === tokenResult.token?.tokenNumber || qToken.id === tokenResult.token?.id;
+                        return (
+                          <div 
+                            key={qToken.id || qToken.tokenNumber} 
+                            className={`p-3 rounded-xl border flex justify-between items-center transition-all ${
+                              isMyToken ? 'bg-sky-50 border-sky-300 ring-2 ring-sky-400/20' : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded ${isMyToken ? 'bg-sky-200 text-sky-900' : 'bg-slate-100 text-slate-600'}`}>
+                                #{qToken.queuePosition}
+                              </span>
+                              <span className={`text-sm font-black ${isMyToken ? 'text-sky-900' : 'text-slate-800'}`}>
+                                {qToken.tokenNumber}
+                              </span>
+                              {isMyToken && (
+                                <span className="px-2 py-0.5 bg-sky-600 text-white text-[10px] font-bold rounded-md">YOUR TOKEN</span>
+                              )}
+                            </div>
+                            <span className="text-xs font-medium text-slate-500">
+                              Est. Wait ~{qToken.predictedWaitMinutes} mins
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-500 italic">
+                      Queue is currently empty.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 text-center text-xs text-slate-400">Loading live queue state...</div>
             )}
           </div>
 
-          <p className="text-sm text-slate-600">Please present this token at the registration desk upon arrival.</p>
-          
-          <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
-            <button
-              type="button"
-              onClick={() => {
-                if (tokenResult.token?.id) {
-                  window.location.href = `/track/${tokenResult.token.id}`;
-                }
-              }}
-              className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900"
-            >
-              View Live Queue
-            </button>
-            <button
-              type="button"
-              onClick={() => setTokenResult(null)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700"
-            >
-              Book Another Token
-            </button>
-          </div>
+          {/* Real-time SMS Inbox Simulator Widget */}
+          <LiveSmsInbox targetPhone={tokenResult.token?.patientPhone || formData.phone} tokenId={tokenResult.token?.id} />
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Pincode Search */}
+        <form onSubmit={handleSubmit} className="bg-white p-6 border border-slate-200 rounded-2xl shadow-sm space-y-6">
+          {/* Step 1: Pincode Search */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              1. Search Nearby Government Hospitals
+              1. Search Nearby Hospitals
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="Enter 6-digit Pincode (e.g. 421301)"
+                placeholder="Enter Pincode (e.g. 421301)"
                 value={pinCodeSearch}
                 onChange={(e) => setPinCodeSearch(e.target.value)}
                 className="w-full p-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -317,7 +452,7 @@ export default function OnlineBookingPage() {
               <button
                 type="button"
                 onClick={searchHospitals}
-                className="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-slate-900 whitespace-nowrap"
+                className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 whitespace-nowrap"
               >
                 Search
               </button>
@@ -325,14 +460,14 @@ export default function OnlineBookingPage() {
           </div>
 
           {searched && hospitals.length === 0 && (
-            <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
-              No government hospitals found for this pincode. Please try another one (e.g. 421301).
+            <div className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
+              No hospitals found for this pincode. Showing default government hospitals.
             </div>
           )}
 
           {hospitals.length > 0 && (
             <>
-              {/* Hospital Selection */}
+              {/* Step 2: Hospital Selection */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                   2. Select Hospital
@@ -351,7 +486,7 @@ export default function OnlineBookingPage() {
                 </select>
               </div>
 
-              {/* Categorization Tabs: General OPD vs Specialist */}
+              {/* Step 3: Consultation Category */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                   3. Consultation Category
@@ -360,7 +495,7 @@ export default function OnlineBookingPage() {
                   <button
                     type="button"
                     onClick={() => setConsultationType("GENERAL")}
-                    className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                    className={`py-2.5 text-xs font-bold rounded-lg transition-all ${
                       consultationType === "GENERAL"
                         ? "bg-white text-sky-700 shadow-sm"
                         : "text-slate-600 hover:text-slate-900"
@@ -371,7 +506,7 @@ export default function OnlineBookingPage() {
                   <button
                     type="button"
                     onClick={() => setConsultationType("SPECIALIST")}
-                    className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                    className={`py-2.5 text-xs font-bold rounded-lg transition-all ${
                       consultationType === "SPECIALIST"
                         ? "bg-white text-sky-700 shadow-sm"
                         : "text-slate-600 hover:text-slate-900"
@@ -382,7 +517,7 @@ export default function OnlineBookingPage() {
                 </div>
               </div>
 
-              {/* Conditional Dropdown: General OPD vs Specialist Doctor */}
+              {/* Step 4: Department / Specialist Selection */}
               {consultationType === "GENERAL" ? (
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -429,40 +564,50 @@ export default function OnlineBookingPage() {
                 </div>
               )}
 
-              {/* Patient Personal Details */}
-              <div className="pt-2 border-t border-slate-200">
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
-                  4. Patient Information & Confirmation
+              {/* Step 5: Patient Details & CUSTOM PHONE INPUT */}
+              <div className="pt-4 border-t border-slate-200 space-y-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  4. Patient Information & Custom Contact Phone
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Patient Full Name</label>
+                    <label className="block text-xs text-slate-600 font-medium mb-1">Patient Full Name</label>
                     <input
                       type="text"
                       required
                       value={formData.patientName}
                       onChange={(e) => setFormData({ ...formData, patientName: e.target.value })}
                       placeholder="e.g. Ramesh Patil"
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Mobile Number</label>
-                    <input
-                      type="tel"
-                      required
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="10-digit number"
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
+                    <label className="block text-xs text-slate-700 font-bold mb-1 flex items-center justify-between">
+                      <span>Target Mobile Number (for Live SMS)</span>
+                      <span className="text-[10px] text-sky-600 font-normal">Custom Recipient</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        required
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="+91 9876543210"
+                        className="w-full p-3 pl-9 border border-sky-400 bg-sky-50/30 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                      <Phone className="w-4 h-4 text-sky-600 absolute left-3 top-3.5" />
+                    </div>
+                    <span className="text-[11px] text-slate-500 mt-1 block">
+                      All live SMS notifications & queue alerts will be sent to this number.
+                    </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Age</label>
+                    <label className="block text-xs text-slate-600 font-medium mb-1">Age</label>
                     <input
                       type="number"
                       required
@@ -470,15 +615,16 @@ export default function OnlineBookingPage() {
                       max="120"
                       value={formData.age}
                       onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Gender</label>
+                    <label className="block text-xs text-slate-600 font-medium mb-1">Gender</label>
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      className="w-full p-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
                     >
                       <option value="MALE">Male</option>
                       <option value="FEMALE">Female</option>
@@ -491,12 +637,15 @@ export default function OnlineBookingPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white font-bold rounded-xl text-sm transition-colors shadow-sm"
+                className="w-full py-4 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white font-bold rounded-xl text-sm transition-colors shadow-md flex justify-center items-center gap-2"
               >
-                {loading ? "Processing..." : "Confirm & Book Token"}
+                {loading ? "Processing Booking..." : "Confirm & Book Token"}
               </button>
             </>
           )}
+
+          {/* Live SMS Inbox Preview always visible for testing */}
+          <LiveSmsInbox targetPhone={formData.phone} />
         </form>
       )}
     </div>

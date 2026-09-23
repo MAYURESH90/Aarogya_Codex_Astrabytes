@@ -11,11 +11,13 @@ const displayRoutes = require('./displayRoutes');
 const ivrRoutes = require('./ivrRoutes');
 const adminRoutes = require('./adminRoutes');
 const patientRoutes = require('./patientRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/patients', patientRoutes);
 router.use('/tokens', tokenRoutes);
 router.use('/queue', queueRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/', hospitalRoutes);
 router.use('/medical', medicalRoutes);
 router.use('/payments', paymentRoutes);
