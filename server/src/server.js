@@ -36,7 +36,7 @@ const startServer = async () => {
       }
     }
 
-    server.listen(env.PORT, () => {
+    server.listen(env.PORT, '0.0.0.0', () => {
       console.log('============================================================');
       console.log(` AAROGYA BACKEND SERVER ACTIVE ON PORT ${env.PORT}`);
       console.log(` Environment: ${env.NODE_ENV}`);
