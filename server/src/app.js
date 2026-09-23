@@ -18,7 +18,11 @@ app.use(helmet({
   contentSecurityPolicy: false // Allows Swagger UI to render assets
 }));
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://aarogya-astrabytes-codex.netlify.app'
+  ],
   credentials: true,
   optionsSuccessStatus: 200
 };
